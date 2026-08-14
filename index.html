@@ -196,7 +196,7 @@
           <template x-for="h in headers" :key="h">
             <div class="flex justify-between gap-3 text-sm border-b border-dashed pb-1.5 last:border-none last:pb-0" style="border-color: var(--border)">
               <span class="text-stone-500 shrink-0" x-text="h"></span>
-              <span class="text-stone-800 text-right break-words" x-text="row[h]"></span>
+              <span class="text-stone-800 text-right flex-1 min-w-0 break-words" style="overflow-wrap: anywhere;" x-text="row[h]"></span>
             </div>
           </template>
           <div class="pt-2 relative" x-data="{ open: false }">
@@ -312,6 +312,21 @@ function app() {
       return list.slice(0, 6);
     },
 
+    // Normalizes a date-ish value to DD/MM/YYYY. Leaves already-correct
+    // dd/mm/yyyy strings alone, and leaves anything unparseable untouched.
+    formatDateValue(value) {
+      const v = (value ?? '').toString().trim();
+      if (!v) return v;
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return v;
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return v;
+      const yyyy = d.getFullYear();
+      if (yyyy < 1900 || yyyy > 2100) return v;
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      return `${dd}/${mm}/${yyyy}`;
+    },
+
     async handleFiles(fileList) {
       const file = fileList && fileList[0];
       if (!file) return;
@@ -324,10 +339,13 @@ function app() {
         let rows = null;
 
         // 1) Try SheetJS — handles real binary .xlsx / .xls / .csv
+        //    cellDates:true gives real JS Date objects for date cells instead of
+        //    ambiguous locale-formatted strings (e.g. "8/4/26" could be read as
+        //    M/D/Y or D/M/Y) — we then format those dates ourselves, consistently.
         try {
-          const wb = XLSX.read(buf, { type: 'array' });
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
           const sheet = wb.Sheets[wb.SheetNames[0]];
-          const parsed = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+          const parsed = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false, dateNF: 'dd/mm/yyyy' });
           if (parsed && parsed.length > 1) rows = parsed;
         } catch (e) {
           rows = null;
@@ -348,9 +366,11 @@ function app() {
         }
 
         this.headers = table.headers;
+        const dateHeaders = table.headers.filter(h => /date/i.test(h));
         this.rows = table.dataRows.map((r, idx) => {
           const obj = { _id: Date.now() + '-' + idx, _source: '' };
           table.headers.forEach((h, j) => { obj[h] = (r[j] ?? '').toString().trim(); });
+          dateHeaders.forEach(h => { obj[h] = this.formatDateValue(obj[h]); });
           return obj;
         });
       } catch (err) {
@@ -423,11 +443,19 @@ function app() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = (this.fileName ? this.fileName.replace(/\.[^.]+$/, '') : 'statement') + '_categorized.csv';
+      const base = this.fileName ? this.fileName.replace(/\.[^.]+$/, '') : 'statement';
+      a.download = `${base}_categorized_${this.timestampForFilename()}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+    },
+
+    // e.g. 2026-08-14_15-42-30, safe for filenames
+    timestampForFilename() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
     },
 
     clearAll() {
