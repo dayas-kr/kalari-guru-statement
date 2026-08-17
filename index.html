@@ -155,32 +155,18 @@
                 <template x-for="h in headers" :key="h">
                   <td class="px-3 py-2 align-top whitespace-nowrap max-w-[140px] sm:max-w-xs truncate text-stone-700" x-text="row[h]" :title="row[h]"></td>
                 </template>
-                <td class="sticky-col px-3 py-2 align-top relative" x-data="{ open: false }">
+                <td class="sticky-col px-3 py-2 align-top">
                   <input
                     type="text"
+                    list="source-suggestions"
                     autocomplete="off"
                     x-model="row._source"
-                    @focus="open = true"
-                    @input="open = true"
-                    @blur="setTimeout(() => open = false, 150); addSourceSuggestion(row._source)"
-                    @keydown.enter="addSourceSuggestion(row._source); open = false; $event.target.blur()"
-                    @keydown.escape="open = false"
+                    @change="addSourceSuggestion(row._source)"
+                    @blur="addSourceSuggestion(row._source)"
+                    @keydown.enter="addSourceSuggestion(row._source); $event.target.blur()"
                     placeholder="e.g. Tea expense"
                     class="source-input w-40 sm:w-44 px-2 py-1.5 rounded-md border border-stone-300 text-sm"
                   >
-                  <ul
-                    x-show="open && matchingSuggestions(row._source).length"
-                    x-transition.opacity.duration.100ms
-                    class="absolute right-0 z-20 mt-1 w-40 sm:w-48 bg-white border border-stone-200 rounded-md shadow-lg max-h-40 overflow-y-auto text-sm"
-                  >
-                    <template x-for="sugg in matchingSuggestions(row._source)" :key="sugg">
-                      <li
-                        @mousedown.prevent="row._source = sugg; addSourceSuggestion(sugg); open = false"
-                        class="px-2 py-1.5 hover:bg-amber-50 cursor-pointer truncate"
-                        x-text="sugg"
-                      ></li>
-                    </template>
-                  </ul>
                 </td>
               </tr>
             </template>
@@ -199,37 +185,30 @@
               <span class="text-stone-800 text-right flex-1 min-w-0 break-words" style="overflow-wrap: anywhere;" x-text="row[h]"></span>
             </div>
           </template>
-          <div class="pt-2 relative" x-data="{ open: false }">
+          <div class="pt-2">
             <label class="text-xs font-medium block mb-1" style="color: var(--maroon)">Source</label>
             <input
               type="text"
+              list="source-suggestions"
               autocomplete="off"
               x-model="row._source"
-              @focus="open = true"
-              @input="open = true"
-              @blur="setTimeout(() => open = false, 150); addSourceSuggestion(row._source)"
-              @keydown.enter="addSourceSuggestion(row._source); open = false; $event.target.blur()"
-              @keydown.escape="open = false"
+              @change="addSourceSuggestion(row._source)"
+              @blur="addSourceSuggestion(row._source)"
+              @keydown.enter="addSourceSuggestion(row._source); $event.target.blur()"
               placeholder="e.g. Tea expense"
               class="source-input w-full px-3 py-2 rounded-md border border-stone-300 text-sm"
             >
-            <ul
-              x-show="open && matchingSuggestions(row._source).length"
-              x-transition.opacity.duration.100ms
-              class="absolute left-0 right-0 z-20 mt-1 bg-white border border-stone-200 rounded-md shadow-lg max-h-40 overflow-y-auto text-sm"
-            >
-              <template x-for="sugg in matchingSuggestions(row._source)" :key="sugg">
-                <li
-                  @mousedown.prevent="row._source = sugg; addSourceSuggestion(sugg); open = false"
-                  class="px-3 py-2 hover:bg-amber-50 cursor-pointer truncate"
-                  x-text="sugg"
-                ></li>
-              </template>
-            </ul>
           </div>
         </div>
       </template>
     </div>
+
+    <!-- Shared native datalist for autosuggestion, built from persisted sources -->
+    <datalist id="source-suggestions">
+      <template x-for="s in sourceSuggestions" :key="s">
+        <option :value="s"></option>
+      </template>
+    </datalist>
 
     <!-- Saved sources manager -->
     <div class="card p-5" x-show="sourceSuggestions.length">
@@ -302,14 +281,6 @@ function app() {
     formatMoney(n) {
       if (n === null || n === undefined) return '—';
       return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    },
-
-    matchingSuggestions(query) {
-      const q = (query || '').trim().toLowerCase();
-      const list = q
-        ? this.sourceSuggestions.filter(s => s.toLowerCase().includes(q))
-        : this.sourceSuggestions;
-      return list.slice(0, 6);
     },
 
     // Normalizes a date-ish value to DD/MM/YYYY. Leaves already-correct
